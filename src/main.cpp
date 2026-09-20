@@ -1,10 +1,13 @@
 // =====================================================================
 // ESP32 + TCS3200 Color Standard Inspector
-// - ปุ่ม Set Standard / Check Color ทำงานผ่าน Interrupt (ไม่ blocking)
-// - Calibration ด้วยแผ่นขาว/ดำ ผ่านคำสั่ง Serial ('W' = white, 'K' = black)
+// - ปุ่มกดสั้น = ทำงานปกติ (Set Standard / Check Color)
+// - ปุ่มกดค้าง 2 วินาที = Calibrate อัตโนมัติ (ไม่ต้องพิมพ์ Serial แล้ว)
+//     Btn1 (Set standard) ค้าง 2s = Calibrate WHITE
+//     Btn2 (Check color)  ค้าง 2s = Calibrate BLACK
 // - แปลงค่า RGB (0-255) -> CIE XYZ -> CIE L*a*b*
 // - คำนวณ Delta E (CIE76) เทียบกับค่ามาตรฐานที่บันทึกไว้
 // - DHT11 เช็คสภาพแวดล้อม (แจ้งเตือนแต่ไม่หยุดทำงาน)
+// - ใช้ polling (ไม่ใช้ interrupt) เพื่อแยกกดสั้น/กดค้างได้ง่ายและปลอดภัยกว่า
 // - ทุกอย่างเขียนแบบ non-blocking ด้วย millis() ยกเว้น pulseIn()
 //   ซึ่งมี timeout จำกัดอยู่แล้ว (ไม่เกิน 50ms ต่อครั้ง)
 // =====================================================================
@@ -44,31 +47,25 @@ const int LED_R = 5;
 const int LED_G = 23;
 const int LED_B = 15;
 
-// ---------------- ปุ่มกด (Interrupt) ----------------
+// ---------------- ปุ่มกด (Polling + จับเวลากดค้าง) ----------------
+// กดสั้น (ปล่อยก่อน 2 วิ)  -> ทำงานปกติ (Set Standard / Check Color)
+// กดค้าง 2 วิขึ้นไป         -> เข้าโหมด Calibrate อัตโนมัติ
 const int button_set_standard = 18;
 const int button_check_color = 19;
-constexpr uint32_t BUTTON_DEBOUNCE_US = 250000UL; // 250ms กันเด้ง
+constexpr unsigned long LONG_PRESS_MS = 2000; // กดค้าง 2 วิ = สั่ง calibrate
+constexpr unsigned long DEBOUNCE_MS = 30;     // กันเด้งตอนกด/ปล่อย
 
-volatile bool requestSetStandard = false;
-volatile bool requestCheckColor = false;
-volatile uint32_t lastSetInterruptUs = 0;
-volatile uint32_t lastCheckInterruptUs = 0;
+struct ButtonTracker {
+  bool isDown = false;
+  unsigned long pressStartMs = 0;
+  bool longFired = false;
+  int lastRaw = HIGH;
+  unsigned long lastChangeMs = 0;
+};
+ButtonTracker btnSet, btnCheck;
 
-void IRAM_ATTR onSetStandardButton() {
-  uint32_t now = micros();
-  if (now - lastSetInterruptUs > BUTTON_DEBOUNCE_US) {
-    requestSetStandard = true;
-    lastSetInterruptUs = now;
-  }
-}
-
-void IRAM_ATTR onCheckColorButton() {
-  uint32_t now = micros();
-  if (now - lastCheckInterruptUs > BUTTON_DEBOUNCE_US) {
-    requestCheckColor = true;
-    lastCheckInterruptUs = now;
-  }
-}
+bool requestSetStandard = false;
+bool requestCheckColor = false;
 
 // ---------------- TCS3200 ----------------
 const int S0 = 32;
@@ -108,7 +105,7 @@ constexpr float DELTA_E_THRESHOLD = 5.0f;
 enum AppState { STATE_IDLE, STATE_MEASURE_STANDARD, STATE_MEASURE_CHECK };
 AppState appState = STATE_IDLE;
 
-constexpr unsigned long MEASURE_DURATION_MS = 5000; // วัด 5 วินาที
+constexpr unsigned long MEASURE_DURATION_MS = 5000; // วัด 5 วินาทีตามที่ขอ
 unsigned long measureStartMs = 0;
 unsigned long sumRed = 0, sumGreen = 0, sumBlue = 0;
 uint16_t sampleCount = 0;
@@ -134,7 +131,9 @@ float calculateDeltaE(const LabColor &c1, const LabColor &c2);
 void setStatusLed(bool green, bool yellow, bool red);
 void showRgbOnLed(const RGBColor &rgb);
 void checkEnvironment();
-void handleSerialCalibration();
+void calibrateWhite();
+void calibrateBlack();
+void pollButton(int pin, ButtonTracker &tracker, bool &shortPressFlag, void (*onLongPress)());
 void startMeasurement(AppState target);
 void updateMeasurement();
 void finishMeasurement();
@@ -168,20 +167,21 @@ void setup() {
 
   pinMode(button_set_standard, INPUT_PULLUP);
   pinMode(button_check_color, INPUT_PULLUP);
-  attachInterrupt(digitalPinToInterrupt(button_set_standard), onSetStandardButton, FALLING);
-  attachInterrupt(digitalPinToInterrupt(button_check_color), onCheckColorButton, FALLING);
 
   Serial.println(F("=== Color Standard Inspector ==="));
-  Serial.println(F("Send 'W' to calibrate white card, 'K' to calibrate black target"));
-  Serial.println(F("Press SET STANDARD button to save reference color"));
-  Serial.println(F("Press CHECK COLOR button to inspect (5s measurement)"));
+  Serial.println(F("Btn1 short = Set standard | Btn1 hold 2s = Calibrate WHITE"));
+  Serial.println(F("Btn2 short = Check color  | Btn2 hold 2s = Calibrate BLACK"));
 
-  oledMessage("Ready!", "W/K = calibrate", "Btn1/Btn2 = use");
+  oledMessage("Ready!", "Hold 2s=calibrate", "Short=normal use");
 }
 
 void loop() {
-  // ---- 1) จัดการคำสั่ง Calibration ผ่าน Serial ----
-  handleSerialCalibration();
+  // ---- 1) เช็คปุ่มทั้งสอง (สั้น=ทำงานปกติ, ค้าง 2 วิ=calibrate) ----
+  // ไม่เช็คระหว่างที่กำลังวัดสีอยู่ กันการกดซ้อนกลางคัน
+  if (appState == STATE_IDLE) {
+    pollButton(button_set_standard, btnSet, requestSetStandard, calibrateWhite);
+    pollButton(button_check_color, btnCheck, requestCheckColor, calibrateBlack);
+  }
 
   // ---- 2) เช็คสภาพแวดล้อมเป็นระยะ (ไม่บล็อกการทำงานอื่น) ----
   if (millis() - lastEnvCheckMs >= ENV_CHECK_INTERVAL_MS) {
@@ -189,9 +189,9 @@ void loop() {
     checkEnvironment();
   }
 
-  // ---- 3) จัดการ flag จากปุ่มกด (ตั้งค่าจาก ISR) ----
+  // ---- 3) จัดการ flag จากการกดสั้น ----
   if (requestSetStandard && appState == STATE_IDLE) {
-    noInterrupts(); requestSetStandard = false; interrupts();
+    requestSetStandard = false;
     if (!calib.calibrated) {
       Serial.println(F("[WARN] Not calibrated yet - readings may be inaccurate"));
     }
@@ -199,7 +199,7 @@ void loop() {
   }
 
   if (requestCheckColor && appState == STATE_IDLE) {
-    noInterrupts(); requestCheckColor = false; interrupts();
+    requestCheckColor = false;
     if (!hasStandard) {
       Serial.println(F("[ERROR] No standard color saved yet. Press SET STANDARD first."));
       oledMessage("NO STANDARD", "Set standard", "color first");
@@ -212,6 +212,43 @@ void loop() {
   // ---- 4) State machine การวัดสี (non-blocking) ----
   if (appState == STATE_MEASURE_STANDARD || appState == STATE_MEASURE_CHECK) {
     updateMeasurement();
+  }
+}
+
+// =====================================================================
+// จับปุ่ม: แยก "กดสั้น" กับ "กดค้าง" โดยไม่บล็อกการทำงานอื่น
+// =====================================================================
+void pollButton(int pin, ButtonTracker &tracker, bool &shortPressFlag, void (*onLongPress)()) {
+  int raw = digitalRead(pin);
+  unsigned long now = millis();
+
+  // debounce: การเปลี่ยนสถานะต้องนิ่งอย่างน้อย DEBOUNCE_MS ก่อนยอมรับว่าเปลี่ยนจริง
+  if (raw != tracker.lastRaw) {
+    tracker.lastChangeMs = now;
+    tracker.lastRaw = raw;
+  }
+  if (now - tracker.lastChangeMs < DEBOUNCE_MS) return;
+
+  bool currentlyDown = (raw == LOW); // ใช้ INPUT_PULLUP: กด = LOW
+
+  if (currentlyDown && !tracker.isDown) {
+    // จังหวะเพิ่งกดลง
+    tracker.isDown = true;
+    tracker.pressStartMs = now;
+    tracker.longFired = false;
+  } else if (currentlyDown && tracker.isDown) {
+    // กดค้างอยู่ - เช็คว่าครบเวลา long press หรือยัง
+    if (!tracker.longFired && (now - tracker.pressStartMs >= LONG_PRESS_MS)) {
+      tracker.longFired = true;
+      onLongPress(); // เรียก calibrateWhite() หรือ calibrateBlack()
+    }
+  } else if (!currentlyDown && tracker.isDown) {
+    // จังหวะปล่อยปุ่ม
+    tracker.isDown = false;
+    if (!tracker.longFired) {
+      // ปล่อยก่อนครบ 2 วิ = ถือเป็นกดสั้น -> ทำงานปกติ
+      shortPressFlag = true;
+    }
   }
 }
 
@@ -252,7 +289,7 @@ void updateMeasurement() {
     sampleCount++;
   }
 
-  // พิมพ์ผลระหว่างวัดทุก 1 วินาที ตามที่ขอ
+  // พิมพ์ผลระหว่างวัดทุก 1 วินาที
   if (millis() - lastPrintMs >= PRINT_INTERVAL_MS) {
     lastPrintMs = millis();
     Serial.print("t=" + String(elapsed / 1000.0f, 1) + "s  ");
@@ -320,7 +357,7 @@ void finishMeasurement() {
 unsigned long readColorFrequency(bool s2State, bool s3State) {
   digitalWrite(S2, s2State);
   digitalWrite(S3, s3State);
-  delayMicroseconds(200); // หน่วงสั้นๆ ให้ filter เปลี่ยนโหมด (เร็วกว่า delay(10) แบบเดิม)
+  delayMicroseconds(200); // หน่วงสั้นๆ ให้ filter เปลี่ยนโหมด
   return pulseIn(Out, LOW, PULSE_TIMEOUT_US);
 }
 
@@ -350,7 +387,6 @@ RGBColor frequencyToRGB(unsigned long r, unsigned long g, unsigned long b) {
 // อ้างอิงสูตรมาตรฐาน sRGB -> XYZ (D65 illuminant) -> Lab
 // =====================================================================
 LabColor rgbToLab(const RGBColor &rgb) {
-  // 1) sRGB (0-255) -> linear RGB (0-1) พร้อม gamma correction
   float rf = rgb.r / 255.0f, gf = rgb.g / 255.0f, bf = rgb.b / 255.0f;
   auto gammaCorrect = [](float c) {
     return (c > 0.04045f) ? powf((c + 0.055f) / 1.055f, 2.4f) : (c / 12.92f);
@@ -359,12 +395,10 @@ LabColor rgbToLab(const RGBColor &rgb) {
   gf = gammaCorrect(gf);
   bf = gammaCorrect(bf);
 
-  // 2) linear RGB -> XYZ (เมทริกซ์มาตรฐาน sRGB, D65)
   float X = rf * 0.4124f + gf * 0.3576f + bf * 0.1805f;
   float Y = rf * 0.2126f + gf * 0.7152f + bf * 0.0722f;
   float Z = rf * 0.0193f + gf * 0.1192f + bf * 0.9505f;
 
-  // 3) XYZ -> Lab (ใช้ white reference D65: Xn=0.95047, Yn=1.0, Zn=1.08883)
   const float Xn = 0.95047f, Yn = 1.0f, Zn = 1.08883f;
   auto f = [](float t) {
     const float delta = 6.0f / 29.0f;
@@ -390,44 +424,55 @@ float calculateDeltaE(const LabColor &c1, const LabColor &c2) {
 }
 
 // =====================================================================
-// Calibration ผ่าน Serial: พิมพ์ 'W' = ขาว, 'K' = ดำ
+// Calibration อัตโนมัติจากการกดปุ่มค้าง
 // =====================================================================
-void handleSerialCalibration() {
-  if (!Serial.available()) return;
-  char c = Serial.read();
+void calibrateWhite() {
+  Serial.println(F("[CALIBRATE] WHITE - hold white card steady, reading..."));
+  oledMessage("Calibrating...", "WHITE card", "Hold steady");
 
-  if (c == 'W' || c == 'w') {
-    Serial.println(F("Calibrating WHITE... place white card, reading 1s"));
-    unsigned long sr = 0, sg = 0, sb = 0;
-    for (int i = 0; i < 10; i++) {
-      sr += readColorFrequency(LOW, LOW);
-      sg += readColorFrequency(HIGH, HIGH);
-      sb += readColorFrequency(LOW, HIGH);
-    }
-    calib.redMin = sr / 10;   // ขาว = ความถี่ต่ำสุด (แสงเข้มที่สุด)
-    calib.greenMin = sg / 10;
-    calib.blueMin = sb / 10;
-    Serial.println("White calib: R=" + String(calib.redMin) + " G=" + String(calib.greenMin) + " B=" + String(calib.blueMin));
-    if (calib.redMax > 0) calib.calibrated = true;
-
-  } else if (c == 'K' || c == 'k') {
-    Serial.println(F("Calibrating BLACK... place black target, reading 1s"));
-    unsigned long sr = 0, sg = 0, sb = 0;
-    for (int i = 0; i < 10; i++) {
-      sr += readColorFrequency(LOW, LOW);
-      sg += readColorFrequency(HIGH, HIGH);
-      sb += readColorFrequency(LOW, HIGH);
-    }
-    calib.redMax = sr / 10;   // ดำ = ความถี่สูงสุด (แสงอ่อนที่สุด)
-    calib.greenMax = sg / 10;
-    calib.blueMax = sb / 10;
-    Serial.println("Black calib: R=" + String(calib.redMax) + " G=" + String(calib.greenMax) + " B=" + String(calib.blueMax));
-    if (calib.redMin > 0) calib.calibrated = true;
+  unsigned long sr = 0, sg = 0, sb = 0;
+  for (int i = 0; i < 10; i++) {
+    sr += readColorFrequency(LOW, LOW);
+    sg += readColorFrequency(HIGH, HIGH);
+    sb += readColorFrequency(LOW, HIGH);
   }
+  calib.redMin = sr / 10;   // ขาว = ความถี่ต่ำสุด (แสงเข้มที่สุด)
+  calib.greenMin = sg / 10;
+  calib.blueMin = sb / 10;
+
+  Serial.println("White calib: R=" + String(calib.redMin) + " G=" + String(calib.greenMin) + " B=" + String(calib.blueMin));
+  if (calib.redMax > 0) calib.calibrated = true;
 
   if (calib.calibrated) {
     Serial.println(F(">>> Calibration COMPLETE <<<"));
     oledMessage("Calibrated!", "Ready to use", "");
+  } else {
+    oledMessage("White saved", "Now hold Btn2 2s", "on black target");
+  }
+}
+
+void calibrateBlack() {
+  Serial.println(F("[CALIBRATE] BLACK - hold black target steady, reading..."));
+  oledMessage("Calibrating...", "BLACK target", "Hold steady");
+
+  unsigned long sr = 0, sg = 0, sb = 0;
+  for (int i = 0; i < 10; i++) {
+    sr += readColorFrequency(LOW, LOW);
+    sg += readColorFrequency(HIGH, HIGH);
+    sb += readColorFrequency(LOW, HIGH);
+  }
+  calib.redMax = sr / 10;   // ดำ = ความถี่สูงสุด (แสงอ่อนที่สุด)
+  calib.greenMax = sg / 10;
+  calib.blueMax = sb / 10;
+
+  Serial.println("Black calib: R=" + String(calib.redMax) + " G=" + String(calib.greenMax) + " B=" + String(calib.blueMax));
+  if (calib.redMin > 0) calib.calibrated = true;
+
+  if (calib.calibrated) {
+    Serial.println(F(">>> Calibration COMPLETE <<<"));
+    oledMessage("Calibrated!", "Ready to use", "");
+  } else {
+    oledMessage("Black saved", "Now hold Btn1 2s", "on white card");
   }
 }
 
