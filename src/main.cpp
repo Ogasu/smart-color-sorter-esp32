@@ -13,7 +13,7 @@ const int SCREEN_HEIGHT = 64; // OLED display height, in pixels
 const int OLED_RESET = -1;    // Reset pin # (or -1 if sharing Arduino reset pin)
 Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET); // Create an instance of the SSD1306 display
 
-//set up led 
+//set up led
 const int LED_RED = 27;
 const int LED_GREEN = 13;
 const int LED_YELLOW = 14;
@@ -21,89 +21,124 @@ const int LED_YELLOW = 14;
 //set up RGB LED
 const int LED_R = 5;
 const int LED_G = 23;
-const int LED_B = 15; 
+const int LED_B = 15;
+
+//set up button
+const int button_set_standard = 18;
+const int button_check_color = 19;
+
+bool oledOK = false;
 
 void check_equipment();
+void showStatus(const String &label, bool ok, const String &extra = "");
 
 void setup() {
   Serial.begin(115200);
   dht.begin();
-  Wire.begin(21,22); // Initialize I2C with SDA on GPIO 21 and SCL on GPIO 22
-  display.begin(SSD1306_SWITCHCAPVCC, 0x3C);  // initialize with the I2C addr 0x3C (for the 128x64)
+  Wire.begin(21, 22); // Initialize I2C with SDA on GPIO 21 and SCL on GPIO 22
+  Wire.setTimeOut(1000); // Set I2C timeout to 1000 milliseconds
 
-  // set up the LED pins
+  // set up pins
   pinMode(LED_RED, OUTPUT);
   pinMode(LED_GREEN, OUTPUT);
   pinMode(LED_YELLOW, OUTPUT);
   pinMode(LED_R, OUTPUT);
   pinMode(LED_G, OUTPUT);
   pinMode(LED_B, OUTPUT);
+  pinMode(button_set_standard, INPUT_PULLUP);
+  pinMode(button_check_color, INPUT_PULLUP);
 
-  // check the equipment
   check_equipment();
 
-  display.clearDisplay();
-  display.setTextSize(1);
-  display.setTextColor(SSD1306_WHITE);
-  display.setCursor(0, 0);
-  display.println("Ready!");
-  display.display();
+  if (oledOK) {
+    display.clearDisplay();
+    display.setTextSize(1);
+    display.setTextColor(SSD1306_WHITE);
+    display.setCursor(0, 0);
+    display.println("Ready!");
+    display.display();
+  }
 }
 
 void loop() {
-  float h = dht.readHumidity();
-  float t = dht.readTemperature();
-  Serial.print("Humidity: ");
-  Serial.print(h);
-  Serial.print(" %\t");
-  Serial.print("Temperature: ");
-  Serial.println(t);
-  delay(2000); // Wait a few seconds between measurements.
+
 }
 
+// helper: แสดงผลทั้ง Serial และ OLED (ถ้าจอพร้อม) ในบรรทัดเดียวกัน
+void showStatus(const String &label, bool ok, const String &extra) {
+  String line = label + ": " + (ok ? "OK" : "FAIL");
+  if (extra.length() > 0) line += " " + extra;
+  Serial.println(line);
+
+  if (oledOK) {
+    display.println(line);
+    display.display();
+  }
+}
 
 void check_equipment() {
-  // check the DHT sensor
+  // ----- OLED -----
+  oledOK = display.begin(SSD1306_SWITCHCAPVCC, 0x3C);
+  if (oledOK) {
+    display.clearDisplay();
+    display.setTextSize(1);
+    display.setTextColor(SSD1306_WHITE);
+    display.setCursor(0, 0);
+    display.println("Equipment Check");
+    display.display();
+  } else {
+    Serial.println("SSD1306 allocation failed - continuing without OLED");
+  }
+
+  // ----- 1) เช็ค DHT11 -----
   float h = dht.readHumidity();
   float t = dht.readTemperature();
+  bool dhtOK = !(isnan(h) || isnan(t));
+  showStatus("DHT11", dhtOK,
+      dhtOK ? (String(t, 1) + "C " + String(h, 0) + "%") : "");
 
-  if (isnan(h) || isnan(t)) {
-    Serial.println("Failed to read from DHT sensor!");
-    return;
+  // ----- 2) เช็ค LED สถานะ + RGB LED -----
+  digitalWrite(LED_RED, HIGH);    delay(300); digitalWrite(LED_RED, LOW);
+  digitalWrite(LED_YELLOW, HIGH); delay(300); digitalWrite(LED_YELLOW, LOW);
+  digitalWrite(LED_GREEN, HIGH);  delay(300); digitalWrite(LED_GREEN, LOW);
+  digitalWrite(LED_R, HIGH);      delay(300); digitalWrite(LED_R, LOW);
+  digitalWrite(LED_G, HIGH);      delay(300); digitalWrite(LED_G, LOW);
+  digitalWrite(LED_B, HIGH);      delay(300); digitalWrite(LED_B, LOW);
+  showStatus("LEDs", true, "check by eye");
+
+  // ----- 3) เช็คปุ่มกด -----
+  Serial.println("Press either button within 5s...");
+  if (oledOK) {
+    display.println("Press a button");
+    display.println("(5s timeout)");
+    display.display();
   }
-  Serial.println("DHT11: OK");
 
-  // check the OLED display
-  if(!display.begin(SSD1306_SWITCHCAPVCC, 0x3C)) {
-    Serial.println("SSD1306 allocation failed");
-    for(;;); // Don't proceed, loop forever
+  const unsigned long BUTTON_TIMEOUT_MS = 5000;
+  unsigned long startTime = millis();
+  bool buttonPressed = false;
+  String whichButton = "none";
+
+  while (millis() - startTime < BUTTON_TIMEOUT_MS) {
+    if (digitalRead(button_set_standard) == LOW) {
+      buttonPressed = true;
+      whichButton = "Set standard";
+      break;
+    }
+    if (digitalRead(button_check_color) == LOW) {
+      buttonPressed = true;
+      whichButton = "Measure color";
+      break;
+    }
+    delay(10);
   }
-  display.clearDisplay();
-  display.setTextSize(1);
-  display.setTextColor(SSD1306_WHITE);
-  display.setCursor(0, 0);
-  display.println("OLED: OK");
-  display.display();
 
-  // check the LEDs
-  digitalWrite(LED_RED, HIGH);
-  delay(500);
-  digitalWrite(LED_RED, LOW);
-  digitalWrite(LED_YELLOW, HIGH);
-  delay(500);
-  digitalWrite(LED_YELLOW, LOW);
-  digitalWrite(LED_GREEN, HIGH);
-  delay(500);
-  digitalWrite(LED_GREEN, LOW);
-  digitalWrite(LED_R, HIGH);
-  delay(500);
-  digitalWrite(LED_R, LOW);
-  digitalWrite(LED_G, HIGH);
-  delay(500);
-  digitalWrite(LED_G, LOW);
-  digitalWrite(LED_B, HIGH);
-  delay(500);
-  digitalWrite(LED_B, LOW);
-  Serial.println("LEDs: OK(ถ้าไฟติดและดับตามลำดับ)");
+  showStatus("Button", buttonPressed,
+      buttonPressed ? ("(" + whichButton + ")") : "(timeout, no press)");
 
+  Serial.println("=== Equipment check done ===");
+  if (oledOK) {
+    display.println("--- Done ---");
+    display.display();
+  }
 }
