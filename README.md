@@ -1,4 +1,4 @@
-# Smart Color Sorting & Logging System
+# Smart Color Sorting
 
 ระบบตรวจสอบสีวัตถุด้วย ESP32 + TCS3200 เทียบกับค่ามาตรฐานที่ตั้งไว้ พร้อมชดเชยผลกระทบจากอุณหภูมิ/ความชื้น (DHT11) และแสดงผลผ่าน OLED + LED
 
