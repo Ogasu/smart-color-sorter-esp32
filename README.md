@@ -1,11 +1,11 @@
 # Smart Color Sorting
 
-## Overview
+## 1) Overview
 
 ระบบตรวจสอบสีวัตถุด้วย ESP32 + TCS3200 เทียบกับค่ามาตรฐานที่ตั้งไว้ พร้อมชดเชยผลกระทบจากอุณหภูมิ/ความชื้น (DHT11) และแสดงผลผ่าน OLED + LED
 
-## Picture of Actual Hardware
-![Actual Hardware](.\image\วงจรอุปกรณ์จริง.jpg)
+## 2) Picture of Actual Hardware
+![Actual Hardware](image/วงจรอุปกรณ์จริง.jpg)
 
 ## อุปกรณ์ที่ใช้
 
@@ -19,7 +19,7 @@
 | RGB LED | แสดงสีที่วัดได้จริง |
 | ปุ่มกด x2 | Set Standard / Check Color (กดสั้น) และ Calibrate (กดค้าง 2 วิ) |
 
-## Block Diagram & Circuit Diagram
+## 3) Block Diagram & Circuit Diagram
 
 ### Block Diagram (Input → Process → Output)
  
@@ -47,7 +47,7 @@ flowchart LR
 ```
 ### Circuit Diagram
 
-![Block Diagram](.\image\วงจรจำลอง.png)
+![Block Diagram](\image\วงจรจำลอง.png)
 
 
 ## ตารางกำหนดขา (Pin Mapping)
@@ -75,7 +75,18 @@ flowchart LR
 
 > ⚠️ **GPIO 2** และ **GPIO 15** เป็น strapping pin มีผลต่อการเข้า Boot/Download Mode ตอนอัปโหลดโค้ด หากเจอปัญหา `Wrong boot mode` ให้ลองถอดสายที่ต่อขาเหล่านี้ออกชั่วคราวระหว่างอัปโหลด
 
-## กระบวนการทำงานโดยรวม
+## 4) Code 
+
+ซอร์สโค้ดฉบับสมบูรณ์ (เวอร์ชันล่าสุด) ถูกจัดเก็บอยู่ที่ [`src/main.cpp`](./src/main.cpp)
+
+## 5) Demonstration VDO
+
+สามารถรับชมวิดีโอสาธิตการทำงานและทดสอบระบบจริงได้ที่ลิงก์ด้านล่าง:
+* **Google Drive Demo Link:** [คลิกที่นี่เพื่อรับชมวิดีโอสาธิตการทำงาน](https://drive.google.com/file/d/1pIEfAaHEV0aG9H365E0cTfveZoBYNHf0/view?usp=sharing)
+
+## 6) Manual Report (คู่มือการใช้งาน)
+
+### กระบวนการทำงานโดยรวม
 
 ระบบแบ่งการทำงานเป็น 3 ส่วนหลักที่ทำงานคู่ขนานกันแบบ non-blocking (ไม่มีจุดใดค้างรอจนระบบอื่นหยุดทำงาน):
 
@@ -150,3 +161,16 @@ flowchart TD
 
     W[DHT11 อ่านค่าทุก 2s<br/>ตลอดเวลาแบบขนาน] -.-> X{อยู่ในช่วง<br/>20-25C, 50-60%?}
     X -- ไม่อยู่ --> Y[แจ้งเตือนผ่าน Serial<br/>ทำงานต่อได้ปกติ]
+
+
+สามารถดูวิดิโอและเอกสารที่เกี่ยวข้องทั้งหมดได้ที่ลิงก์ด้านล่าง:
+* **Google Drive Link:** [คลิกที่นี่เพื่อดูเอกสารและวิดิโอที่เกี่ยวข้อง](https://drive.google.com/drive/folders/1cYNA5aBpP_1kcFingMsXloWdOxsch5ff?usp=sharing)
+
+## 7) Presentation Files
+สามารถดาวน์โหลดไฟล์นำเสนอผลงานได้ที่นี่:
+* [ไฟล์สไลด์นำเสนอต้นฉบับ (.pptx)]()
+* [ไฟล์สไลด์นำเสนอ (.pdf)]()
+
+## 7) Presentation Clips
+สามารถคลิปนำเสนอผลงานได้ที่นี่:
+* [คลิปนำเสนอ]()
