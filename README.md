@@ -1,6 +1,11 @@
 # Smart Color Sorting
 
+## Overview
+
 ระบบตรวจสอบสีวัตถุด้วย ESP32 + TCS3200 เทียบกับค่ามาตรฐานที่ตั้งไว้ พร้อมชดเชยผลกระทบจากอุณหภูมิ/ความชื้น (DHT11) และแสดงผลผ่าน OLED + LED
+
+## Picture of Actual Hardware
+![Actual Hardware](.\image\วงจรอุปกรณ์จริง.jpg)
 
 ## อุปกรณ์ที่ใช้
 
@@ -13,6 +18,37 @@
 | LED เขียว/เหลือง/แดง | แสดงสถานะ ผ่าน/กำลังประมวลผล/ไม่ผ่าน |
 | RGB LED | แสดงสีที่วัดได้จริง |
 | ปุ่มกด x2 | Set Standard / Check Color (กดสั้น) และ Calibrate (กดค้าง 2 วิ) |
+
+## Block Diagram & Circuit Diagram
+
+### Block Diagram (Input → Process → Output)
+ 
+```mermaid
+flowchart LR
+    subgraph INPUT
+        A1[TCS3200<br/>Color sensor]
+        A2[DHT11<br/>Temp and humidity]
+        A3[Buttons x2<br/>Set std / Check]
+    end
+    subgraph PROCESS
+        B1[ESP32<br/>Main controller]
+    end
+    subgraph OUTPUT
+        C1[OLED display]
+        C2[Status LEDs x3]
+        C3[RGB LED]
+    end
+    A1 --> B1
+    A2 --> B1
+    A3 --> B1
+    B1 --> C1
+    B1 --> C2
+    B1 --> C3
+```
+### Circuit Diagram
+
+![Block Diagram](.\image\วงจรจำลอง.png)
+
 
 ## ตารางกำหนดขา (Pin Mapping)
 
