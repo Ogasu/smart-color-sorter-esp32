@@ -83,15 +83,16 @@ flowchart LR
 
 ### Datasheets
 
-ในข้อมูลโครงงานที่ได้รับไม่มีไฟล์ datasheet แนบมาด้วย รายการอุปกรณ์ประกอบด้วย ESP32, TCS3200, DHT11, SSD1306 OLED, LED, RGB LED และปุ่มกด หากมีการเพิ่มอุปกรณ์ ควรแนบ datasheet ของอุปกรณ์นั้นไว้ในโฟลเดอร์เอกสารโครงงาน
+รวม datasheets ของอุปกรณ์ทั้งหมดไว้ใน [โฟลเดอร์ Datasheets บน Google Drive](https://drive.google.com/drive/folders/1gYvXKTo-X0JG-hFTFxcEkIS98EZXfIoH?usp=sharing)
 
 ## 4) Codes — Source Code and Versions
 
-ซอร์สโค้ดหลักที่ระบุไว้คือ [`src/main.cpp`](./src/main.cpp) โดยในชุดข้อมูลที่ได้รับยังไม่มีไฟล์ซอร์สโค้ดหรือบันทึกเวอร์ชันย้อนหลัง จึงยังแสดงรายการการแก้ไขในแต่ละเวอร์ชันไม่ได้ หากมีหลายเวอร์ชัน สามารถเพิ่มรายการพร้อมวันที่และรายละเอียดการเปลี่ยนแปลงไว้ด้านล่างได้
+ซอร์สโค้ดมี 2 เวอร์ชัน โดย Version 1 อยู่ใน branch `version1` และ Version 2 เป็นเวอร์ชันหลักที่อยู่ใน branch `main` ของ GitHub repository
 
 | เวอร์ชัน | รายละเอียด |
 |---|---|
-| — | ยังไม่มีข้อมูลเวอร์ชันโค้ดแนบมา |
+| [Version 1](https://github.com/Ogasu/smart-color-sorter-esp32/tree/version1) | ซอร์สโค้ดใน branch `version1` |
+| [Version 2](https://github.com/Ogasu/smart-color-sorter-esp32/tree/main) | เวอร์ชันหลักใน branch `main` |
 
 ## 5) Demonstration VDO
 
@@ -174,9 +175,9 @@ flowchart TD
 
 ไฟล์นำเสนอควรมีทั้งต้นฉบับและ PDF และไม่ใส่รูปสมาชิกกลุ่มตามข้อกำหนด ข้อมูลที่ได้รับยังไม่มีลิงก์หรือไฟล์สำหรับดาวน์โหลด:
 
-- ต้นฉบับ (.pptx): ยังไม่ได้ระบุลิงก์
-- PDF (.pdf): ยังไม่ได้ระบุลิงก์
+- ต้นฉบับ (.pptx): comming soon
+- PDF (.pdf): comming soon
 
 ## 8) Presentation Clip
 
-คลิปนำเสนอผลงานควรมีความยาว **6 นาที** และต้องเห็นหน้าผู้ที่กำลังนำเสนอตลอดการนำเสนอ ข้อมูลที่ได้รับยังไม่มีลิงก์คลิป
+comming soon
