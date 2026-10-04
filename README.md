@@ -181,4 +181,4 @@ flowchart TD
 ## 8) Presentation Clip
 
 - ต้นฉบับ (6 min): (https://drive.google.com/file/d/1BLFLzZQdKjyTYjYfweshApopKfx2awWu/view?usp=sharing)
-- คลิปเต็ม (8 min): (https://drive.google.com/file/d/1BLFLzZQdKjyTYjYfweshApopKfx2awWu/view?usp=sharing)
+- คลิปเต็ม (8 min): (https://drive.google.com/file/d/11Iw-XSRptqOPtLKl8gpTrcBi9z2aRW3E/view?usp=sharing)
