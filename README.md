@@ -175,9 +175,10 @@ flowchart TD
 
 ไฟล์นำเสนอควรมีทั้งต้นฉบับและ PDF และไม่ใส่รูปสมาชิกกลุ่มตามข้อกำหนด ข้อมูลที่ได้รับยังไม่มีลิงก์หรือไฟล์สำหรับดาวน์โหลด:
 
-- ต้นฉบับ (.pptx): comming soon
-- PDF (.pdf): comming soon
+- ต้นฉบับ (.pptx): (https://docs.google.com/presentation/d/15MikGI1bbQ0WIG2MSrVcMAaPz9odXQD4/edit?usp=sharing&ouid=110563105517118660735&rtpof=true&sd=true)
+- PDF (.pdf): (https://drive.google.com/file/d/1a5M5IKkqirkl2Xb76qBO_1syzHdgb5sb/view?usp=sharing)
 
 ## 8) Presentation Clip
 
-comming soon
+- ต้นฉบับ (6 min): (https://drive.google.com/file/d/1BLFLzZQdKjyTYjYfweshApopKfx2awWu/view?usp=sharing)
+- คลิปเต็ม (8 min): (https://drive.google.com/file/d/1BLFLzZQdKjyTYjYfweshApopKfx2awWu/view?usp=sharing)
